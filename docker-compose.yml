@@ -1,0 +1,93 @@
+version: '3.6'
+services:
+  db:
+    container_name: ${DB_CONTAINER_NAME}
+    image: ${DB_CONTAINER_IMAGE}
+    command: --max_allowed_packet=16M --slave_max_allowed_packet=16M --slave_max_allowed_packet=16M --innodb_buffer_pool_size=${DB_BUFFER_MEMORY} --innodb_log_file_size=${DB_LOG_SIZE} --innodb_log_buffer_size=4M --key_buffer_size=16M --myisam_sort_buffer_size=16M --read_buffer_size=32k --read_rnd_buffer_size=64k --thread_stack=192k --thread_cache_size=8 --query_cache_limit=${DB_QUERY_CACHE_LIMIT} --query_cache_size=${DB_QUERY_CACHE_SIZE}
+    restart: unless-stopped
+    build:
+      context: ./.docker/db
+      dockerfile: Dockerfile
+    networks:
+      - network
+    environment:
+        MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+        MYSQL_DATABASE: ${MYSQL_DATABASE}
+        MYSQL_USER: ${MYSQL_USER}
+        MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+    ports:
+      - "${DB_PORT}:3306"  
+  clamav:
+    container_name: ${AV_CONTAINER_NAME}
+    image: ${AV_CONTAINER_IMAGE}
+    restart: unless-stopped
+    build:
+      context: ./.docker/av
+      dockerfile: Dockerfile
+    volumes:
+      - antivirusdata:/var/lib/clamav
+      - tempdata:/var/www/html/${TEMP_DIR}
+      - storagedata:/var/www/html/${UPLOADS_DIR}
+    networks:
+      - network
+    ports:
+      - ${AV_PORT}:3310
+  host:
+    container_name: ${HOST_CONTAINER_NAME}
+    hostname: ${HOST_NAME}
+    image: ${HOST_CONTAINER_IMAGE}
+    build:
+      context: ./.docker/host
+      dockerfile: Dockerfile
+    networks:
+      - network
+    depends_on:
+      - db
+      - clamav
+    restart: unless-stopped
+    environment:
+      - API_ENV=${API_ENV}
+      - HOST_SERVER_IP=${HOST_SERVER_IP}
+      - MYSQL_HOST=${DB_CONTAINER_NAME}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - DOCKER_BUG=DOCKER_BUG
+    volumes:
+      - ./${DOCUMENT_ROOT}:/var/www/html/
+      - ./${PHP_INI}:/usr/local/etc/php/php.ini
+      - ./${APACHE_PREFORK}:/etc/apache2/mods-available/mpm_prefork.conf
+      - tempdata:/var/www/html/${TEMP_DIR}
+      - storagedata:/var/www/html/${UPLOADS_DIR}
+    ports:
+      - ${HOST_PORT}:80
+  phpmyadmin:
+    container_name: ${DBADMIN_CONTAINER_NAME}
+    image: phpmyadmin
+    restart: unless-stopped
+    volumes:
+      - ./.docker/dbadmin/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
+    ports:
+      - ${DBDBADMIN_PORT}:80
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOST=${DB_CONTAINER_NAME}
+      - UPLOAD_LIMIT=2048000k
+    networks:
+      - network
+    depends_on:
+      - db
+volumes: 
+  dbdata:
+    name: ${HOST_CONTAINER_NAME}-dbdata
+  tempdata:
+    name: ${HOST_CONTAINER_NAME}-tempdata
+  storagedata:
+    name: ${HOST_CONTAINER_NAME}-storagedata
+  antivirusdata:
+    name: ${HOST_CONTAINER_NAME}-antivirusdata
+networks:
+  network:
+    driver: bridge
