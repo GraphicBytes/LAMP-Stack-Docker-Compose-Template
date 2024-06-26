@@ -5,7 +5,6 @@ while true; do
   echo " "
   echo "############################"
   echo " "
-  echo "      THE BODACH SHOW"
   echo "        SHELL TOOLS"
   echo " "
   echo "############################"
